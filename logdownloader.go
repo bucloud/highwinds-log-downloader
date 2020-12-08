@@ -93,7 +93,7 @@ func main() {
 		fmt.Printf("search logs failed, %s\n", e.Error())
 		os.Exit(1)
 	}
-	api.SetDownloadConcurrency(worker)
+	api.SetWorkers(worker)
 	fmt.Printf("going to donwload logs, there are %d files need to download\n", len(files))
 	if _, e := api.Downloads(output, files...); e != nil {
 		fmt.Printf("%s", e.Error())
