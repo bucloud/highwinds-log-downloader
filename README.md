@@ -4,7 +4,7 @@ highlands raw logs download tool
 
 # support
 
-1. use http mode access logs _only availabe before 2020-01-01_
+1. use http mode access logs _only availabe before 2021-01-01_
 2. both hosthash and hostname are available in host flag, if more then one hostnames found, suggestion printed
 3. multiple process supported, but with a max 100
 4. support both privateKey and HMacKey to access raw logs stored in GCS, prefer use privateKey

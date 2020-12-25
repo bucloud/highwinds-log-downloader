@@ -12,21 +12,23 @@ import (
 )
 
 type configure struct {
-	AuthType        string `ini:"auth_type"`
-	Username        string `ini:"user_name"`
-	Password        string `ini:"password"`
-	Token           string `ini:"token"`
-	PrivateKeyJSON  string `ini:"private_key_json"`
-	AccessKeyID     string `ini:"access_key_id"`
-	SecretAccessKey string `ini:"secret_access_key"`
+	AuthType        string `ini:"auth_type,omitempty" comment:"striketracker auth method, available options basic,token"`
+	Username        string `ini:"user_name,omitempty" comment:"striketracker username"`
+	Password        string `ini:"password,omitempty"`
+	Token           string `ini:"token,omitempty"`
+	PrivateKeyJSON  string `ini:"private_key_json,omitempty"`
+	AccessKeyID     string `ini:"access_key_id,omitempty"`
+	SecretAccessKey string `ini:"secret_access_key,omitempty"`
+	BucketName      string `ini:"bucket_name,omitempty"`
+	Region          string `ini:"region,omitempty" comment:"region"`
+	Provider        string `ini:"provider,omitempty" comment:"remote storage service provider, only AWS S3 supported in remote configure"`
 }
 
 type nsConfigure map[string]*configure
 
 var (
 	// Cfg global variable contains configure data
-	defaultConfigScope string = "DEFAULT"
-	configFile         string = homeDir(".highwinds", "hcs.ini")
+	configFile string = homeDir(".highwinds", "hcs.ini")
 )
 
 func homeDir(s ...string) string {
@@ -72,20 +74,18 @@ func (nc nsConfigure) save() error {
 	return nil
 }
 
-func (nc nsConfigure) printCurrentConfig(scopeName ...string) {
+func (nc nsConfigure) printCurrentConfig() {
 	fmt.Printf("# %-15s\t%-20s\t%-10s\t%-8s\t%-15s\t%-15s", "ConfigureScope", "Username", "Password", "Token", "PrivateKeyJSON", "AccessKey&Secret\n")
-	var i int = 1
-	if len(scopeName) == 0 {
-		for s, c := range nc {
+	i := 1
+	for s, c := range nc {
+		if strings.HasPrefix(s, "remote-") {
+			fmt.Printf("%d %-15s\t%-20s\t%-10s\t%-8t\t%-15t\t%-15t\n", i, s, c.BucketName, c.Region, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1)
+		} else {
 			fmt.Printf("%d %-15s\t%-20s\t%-10t\t%-8t\t%-15t\t%-15t\n", i, s, c.Username, len(c.Password) > 1, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1)
-			i++
 		}
-	} else {
-		for _, c := range scopeName {
-			fmt.Printf("%d %-15s\t%-20s\t%-10t\t%-8t\t%-15t\t%-15t\n", i, c, nc[c].Username, len(nc[c].Password) > 1, len(nc[c].Token) > 1, len(nc[c].PrivateKeyJSON) > 1, len(nc[c].AccessKeyID) > 1 && len(nc[c].SecretAccessKey) > 1)
-			i++
-		}
+		i++
 	}
+
 }
 
 func (nc nsConfigure) config() {
@@ -116,40 +116,73 @@ func (nc nsConfigure) editConfig() nsConfigure {
 				Options: []*inputOptions{
 					&inputOptions{Value: "default", Label: "default/global config"},
 					&inputOptions{Value: "custom", Label: "set config for different account"},
-					&inputOptions{Value: "remote", Label: "set config for different account"},
+					&inputOptions{Value: "remote", Label: "set remote config"},
 				},
 			}.scan()
 			switch configScope {
 			case "remote":
-
+				configScope = scanInput{
+					Placeholder: "Input remote config name such like s3-remote1 : ",
+					Minlength:   2,
+				}.scan()
+				configScope = "remote-" + configScope
 			case "custom":
 				configScope = scanInput{
 					Placeholder: "Input accountHash (in order to use configure more effectively, please use accountHash as scope name): ",
 					Vaild:       func(s *string) (bool, error) { return len(*s) == 8, fmt.Errorf("sames not a vaild accountHash") },
 				}.scan()
 			case "default":
-				configScope = defaultConfigScope
+				configScope = ini.DefaultSection
 			default:
-				configScope = defaultConfigScope
+				configScope = ini.DefaultSection
 			}
-			if nc[defaultConfigScope] != nil {
-				nc[configScope] = nc[defaultConfigScope]
-			} else {
+			if nc[configScope] == nil {
 				nc[configScope] = &configure{}
 			}
-			nc[configScope].collect()
+			if strings.HasPrefix(configScope, "remote-") {
+				nc[configScope].collectRemote()
+			} else {
+				if configScope != ini.DefaultSection && nc[ini.DefaultSection] != nil {
+					nc[configScope].Username = nc[ini.DefaultSection].Username
+					nc[configScope].Password = nc[ini.DefaultSection].Password
+				}
+				nc[configScope].collect()
+			}
 			continue
 		case "edit":
 			if len(nc) == 0 {
 				fmt.Println("Nothing found, try create new configure")
 				continue
 			}
-			nc.printCurrentConfig()
-			n := scanInput{Placeholder: "Which config do you want to edit? "}.scan()
+			// nc.printCurrentConfig()
+			n := scanInput{
+				Placeholder: "Which config do you want to edit?\n" + fmt.Sprintf("# %-15s\t%-20s\t%-10s\t%-8s\t%-15s\t%-15s", "ConfigureScope", "Username", "Password", "Token", "PrivateKeyJSON", "AccessKey&Secret"),
+				Options: func(conf nsConfigure) []*inputOptions {
+					var res []*inputOptions
+					for sn, c := range conf {
+						if strings.HasPrefix(sn, "remote-") {
+							res = append(res, &inputOptions{
+								Label: fmt.Sprintf("%-15s\t%-20s\t%-10s\t%-8t\t%-15t\t%-15t\n", sn, c.BucketName, c.Region, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1),
+								Value: sn,
+							})
+						} else {
+							res = append(res, &inputOptions{
+								Label: fmt.Sprintf("%-15s\t%-20s\t%-10t\t%-8t\t%-15t\t%-15t", sn, c.Username, len(c.Password) > 1, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1),
+								Value: sn,
+							})
+						}
+					}
+					return res
+				}(nc),
+			}.scan()
 			if nc[n] == nil {
 				fmt.Println("Scope name not found")
 			} else {
-				nc[n].collect()
+				if strings.HasPrefix(n, "remote-") {
+					nc[n].collectRemote()
+				} else {
+					nc[n].collect()
+				}
 			}
 			continue
 		case "delete":
@@ -157,8 +190,26 @@ func (nc nsConfigure) editConfig() nsConfigure {
 				fmt.Println("Nothing found, try create new configure")
 				continue
 			}
-			nc.printCurrentConfig()
-			n := scanInput{Placeholder: "Which config do you want to delete? "}.scan()
+			n := scanInput{
+				Placeholder: "Which config do you want to edit?\n" + fmt.Sprintf("# %-15s\t%-20s\t%-10s\t%-8s\t%-15s\t%-15s", "ConfigureScope", "Username", "Password", "Token", "PrivateKeyJSON", "AccessKey&Secret"),
+				Options: func(conf nsConfigure) []*inputOptions {
+					var res []*inputOptions
+					for sn, c := range conf {
+						if strings.HasPrefix(sn, "remote-") {
+							res = append(res, &inputOptions{
+								Label: fmt.Sprintf("%-15s\t%-20s\t%-10s\t%-8t\t%-15t\t%-15t\n", sn, c.BucketName, c.Region, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1),
+								Value: sn,
+							})
+						} else {
+							res = append(res, &inputOptions{
+								Label: fmt.Sprintf("%-15s\t%-20s\t%-10t\t%-8t\t%-15t\t%-15t", sn, c.Username, len(c.Password) > 1, len(c.Token) > 1, len(c.PrivateKeyJSON) > 1, len(c.AccessKeyID) > 1 && len(c.SecretAccessKey) > 1),
+								Value: sn,
+							})
+						}
+					}
+					return res
+				}(nc),
+			}.scan()
 			if nc[n] == nil {
 				fmt.Println("Scope name not found")
 			} else {
@@ -179,6 +230,28 @@ func (nc nsConfigure) editConfig() nsConfigure {
 
 func download(urls ...string) {
 
+}
+func (config *configure) collectRemote() {
+	config.Provider = scanInput{
+		Default:     "s3",
+		Placeholder: "chose cloud storage provider\nNote, only aws s3 supported",
+		Minlength:   1,
+		Options: []*inputOptions{
+			&inputOptions{Value: "s3", Label: "aws s3"},
+		},
+	}.scan()
+	config.Region = scanInput{
+		Placeholder: "input bucket region : ",
+		Minlength:   3,
+		Default:     config.Region,
+	}.scan()
+	config.BucketName = scanInput{
+		Placeholder: "input bucket name : ",
+		Minlength:   1,
+		Default:     config.BucketName,
+	}.scan()
+	config.AccessKeyID = scanInput{Placeholder: "Input your access key ID : ", Default: config.AccessKeyID, Minlength: 10}.scan()
+	config.SecretAccessKey = scanInput{Placeholder: "Input your secret key : ", Default: config.SecretAccessKey, Password: true, Minlength: 10}.scan()
 }
 func (config *configure) collect() {
 	config.AuthType = scanInput{
