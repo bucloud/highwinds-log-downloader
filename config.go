@@ -116,9 +116,12 @@ func (nc nsConfigure) editConfig() nsConfigure {
 				Options: []*inputOptions{
 					&inputOptions{Value: "default", Label: "default/global config"},
 					&inputOptions{Value: "custom", Label: "set config for different account"},
+					&inputOptions{Value: "remote", Label: "set config for different account"},
 				},
 			}.scan()
 			switch configScope {
+			case "remote":
+
 			case "custom":
 				configScope = scanInput{
 					Placeholder: "Input accountHash (in order to use configure more effectively, please use accountHash as scope name): ",
@@ -130,8 +133,7 @@ func (nc nsConfigure) editConfig() nsConfigure {
 				configScope = defaultConfigScope
 			}
 			if nc[defaultConfigScope] != nil {
-				dc := nc[defaultConfigScope]
-				nc[configScope] = &*dc
+				nc[configScope] = nc[defaultConfigScope]
 			} else {
 				nc[configScope] = &configure{}
 			}
@@ -147,7 +149,6 @@ func (nc nsConfigure) editConfig() nsConfigure {
 			if nc[n] == nil {
 				fmt.Println("Scope name not found")
 			} else {
-				nc[n] = &configure{}
 				nc[n].collect()
 			}
 			continue
@@ -176,6 +177,9 @@ func (nc nsConfigure) editConfig() nsConfigure {
 	return nc
 }
 
+func download(urls ...string) {
+
+}
 func (config *configure) collect() {
 	config.AuthType = scanInput{
 		Default:     "basic",
