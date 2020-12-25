@@ -229,7 +229,7 @@ func main() {
 		}
 		fmt.Printf("search raw logs for host %s success, there are %d files, begin downloading...\n", h.Name, len(urls))
 		if strings.LastIndex(output, ":") > 0 && output[strings.LastIndex(output, ":")+1:] == "/" {
-			output = output + "/" + h.Name
+			output = output + "/" + h.Name + "/"
 		}
 		if _, e := api.Downloads(output, urls...); e != nil {
 			fmt.Printf("%s\n", e.Error())
