@@ -56,7 +56,7 @@ func init() {
 	case "debug":
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	default:
-		loglevel = "error"
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 	}
 	logger = zerolog.New(os.Stdout).With().Logger()
 
@@ -125,6 +125,7 @@ func main() {
 	}
 	hosts := []*hwapi.HostName{}
 	if hostPattern != "" {
+		logger.Info().Str("account_hash", cu.AccountHash).Str("search_key", hostPattern).Msg("search hosts by pattern")
 		r, e := api.Search(cu.AccountHash, hostPattern, maxResult)
 		if e != nil {
 			logger.Error().Err(e).Msg("search host failed")
@@ -133,6 +134,7 @@ func main() {
 	} else {
 		for _, hosthash := range strings.Split(hosthashs, ",") {
 			// force search host
+			logger.Info().Str("account_hash", cu.AccountHash).Str("search_key", hosthash).Msg("search hosts by host")
 			r, e := api.Search(cu.AccountHash, hosthash, maxResult)
 			if e != nil {
 				logger.Error().Err(e).Str("account_hash", cu.AccountHash).Str("search_key", hosthash).Msg("search hosts failed")
@@ -227,7 +229,7 @@ func main() {
 			logger.Error().Str("account_hash", h.AccountHash).Msg("subAccounts's configure not found, please create new config")
 			os.Exit(3)
 		}
-
+		logger.Trace().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
 		urls, err := api.SearchLogsV2(&hwapi.SearchLogsOptions{
 			HostHash:       h.HostHash,
 			AccountHash:    h.AccountHash,
@@ -246,7 +248,7 @@ func main() {
 		}
 		logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
 		tempDir := output
-		if strings.LastIndex(output, ":") > 0 && output[strings.LastIndex(output, ":")+1:] == "/" {
+		if strings.LastIndex(output, ":") > 0 {
 			tempDir = tempDir + "/" + h.Name + "/"
 		}
 		if _, e := api.Downloads(tempDir, urls...); e != nil {
