@@ -15,21 +15,23 @@ import (
 )
 
 var (
-	start                  time.Time = time.Now().UTC().Add(-time.Hour * 24)
-	end                    time.Time = time.Now().UTC()
-	maxResult              int       = 10
-	forceGenerate          bool      = false
-	keyLimit               int       = 3
-	worker                 uint      = 1
-	hosthashs              string    = ""
-	hostPattern            string    = ""
-	logtype                string    = "cds"
-	user                   string    = ""
-	password               string    = ""
-	output                 string    = "./"
-	showSecret             bool      = false
-	autoGenerateCredential bool      = false
-	loglevel               string    = "error"
+	start                  time.Time     = time.Now().UTC().Add(-time.Hour * 24)
+	end                    time.Time     = time.Now().UTC()
+	maxResult              int           = 10
+	forceGenerate          bool          = false
+	keyLimit               int           = 3
+	worker                 uint          = 1
+	hosthashs              string        = ""
+	hostPattern            string        = ""
+	logtype                string        = "cds"
+	user                   string        = ""
+	password               string        = ""
+	output                 string        = "./"
+	showSecret             bool          = false
+	autoGenerateCredential bool          = false
+	loglevel               string        = "error"
+	loopInterval           time.Duration = time.Minute * 10
+	fixTime                bool          = true
 
 	// Cfg configure
 	Cfg     nsConfigure   = make(nsConfigure)
@@ -51,6 +53,8 @@ func init() {
 	flag.BoolVar(&showSecret, "show_secret", showSecret, "show secert data instead of hide them")
 	flag.BoolVar(&autoGenerateCredential, "auto", autoGenerateCredential, "auto generate credential(access_key_id,secret_key), note credential will not generated when there are 3 credentials already exists")
 	flag.BoolVar(&forceGenerate, "force_generate", forceGenerate, "force generate credentials if there are 3 credentials already exists in account")
+	flag.DurationVar(&loopInterval, "loop", loopInterval, "loop download logs with a provided time range, zero means disable loop")
+	flag.BoolVar(&fixTime, "fix_time", fixTime, "fix start/end time in loop download mode")
 	flag.Parse()
 
 	switch loglevel {
@@ -74,7 +78,7 @@ func init() {
 	output.FormatFieldValue = func(i interface{}) string {
 		return strings.ToUpper(fmt.Sprintf("%s", i))
 	}
-	logger = zerolog.New(output).With().Logger()
+	logger = zerolog.New(output).With().Timestamp().Logger()
 
 	if st, e1 := time.Parse("2006-01-02T15:04:05Z", *s); *s != "" && e1 == nil {
 		start = st
@@ -190,87 +194,100 @@ func main() {
 	}
 	// parse raw log urls
 	// allurls := []string{}
-	for _, h := range hosts {
-		startTime := time.Now()
-		hcred := &hwapi.HCSCredentials{}
-		if Cfg[h.AccountHash] == nil {
-			Cfg[h.AccountHash] = Cfg[ini.DefaultSection]
-			if h.AccountHash != cu.AccountHash {
-				Cfg[h.AccountHash].AccessKeyID = ""
-				Cfg[h.AccountHash].SecretAccessKey = ""
-				Cfg[h.AccountHash].PrivateKeyJSON = ""
-			}
-			Cfg.save()
-		}
-
-		if (Cfg[h.AccountHash].AccessKeyID == "" || Cfg[h.AccountHash].SecretAccessKey == "") && Cfg[h.AccountHash].PrivateKeyJSON == "" && autoGenerateCredential {
-			logger.Debug().Str("account_hash", h.AccountHash).Msg("try auto generate service_account")
-			// get gcs account
-			var serviceAccount *hwapi.GCSAccount
-			sa, err := api.GetGCSAccounts(h.AccountHash)
-			if err != nil || len(sa.List) == 0 {
-				// try create gcs account
-				if serviceAccount, err = api.CreateGCSAccount(h.AccountHash, "auto generate log account", "log_account"); err != nil {
-					logger.Error().Err(err).Str("account_hash", h.AccountHash).Msg("create service_account failed")
-					os.Exit(5)
+	for {
+		ts := time.Now()
+		for _, h := range hosts {
+			startTime := time.Now()
+			hcred := &hwapi.HCSCredentials{}
+			if Cfg[h.AccountHash] == nil {
+				Cfg[h.AccountHash] = Cfg[ini.DefaultSection]
+				if h.AccountHash != cu.AccountHash {
+					Cfg[h.AccountHash].AccessKeyID = ""
+					Cfg[h.AccountHash].SecretAccessKey = ""
+					Cfg[h.AccountHash].PrivateKeyJSON = ""
 				}
-			} else {
-				serviceAccount = sa.List[0]
-			}
-			logger.Debug().Str("account_hash", h.AccountHash).Msg("try auto generate hmac_keys")
-			// try generate HMAC_key
-			hmacs, err := api.GetGCSHMacKeys(h.AccountHash, serviceAccount.ID)
-			if err != nil || len(hmacs.List) <= keyLimit || (len(hmacs.List) > keyLimit && forceGenerate) {
-				// try generate hmac_key
-				hmac, err := api.CreateGCSHMacKey(h.AccountHash, serviceAccount.ID)
-				if err != nil {
-					logger.Error().Err(err).Str("account_hash", h.AccountHash).Str("service_account_name", serviceAccount.Name).Msg("create service_account failed")
-					os.Exit(5)
-				}
-				Cfg[h.AccountHash] = &configure{}
-				Cfg[h.AccountHash].AccessKeyID = hmac.AccessID
-				hcred.AccessKeyID = hmac.AccessID
-				Cfg[h.AccountHash].SecretAccessKey = hmac.Secret
-				hcred.SecretKey = hmac.Secret
 				Cfg.save()
-			} else {
-				logger.Error().Msg("hmac_key generate failed, try create it manually")
-				os.Exit(5)
 			}
-		} else if (Cfg[h.AccountHash].AccessKeyID != "" && Cfg[h.AccountHash].SecretAccessKey != "") || Cfg[h.AccountHash].PrivateKeyJSON != "" {
-			hcred.AccessKeyID = Cfg[h.AccountHash].AccessKeyID
-			hcred.SecretKey = Cfg[h.AccountHash].SecretAccessKey
-			hcred.PrivateKeyJSON = Cfg[h.AccountHash].PrivateKeyJSON
-		} else {
-			logger.Error().Str("account_hash", h.AccountHash).Msg("subAccounts's configure not found, please create new config")
-			os.Exit(3)
+
+			if (Cfg[h.AccountHash].AccessKeyID == "" || Cfg[h.AccountHash].SecretAccessKey == "") && Cfg[h.AccountHash].PrivateKeyJSON == "" && autoGenerateCredential {
+				logger.Debug().Str("account_hash", h.AccountHash).Msg("try auto generate service_account")
+				// get gcs account
+				var serviceAccount *hwapi.GCSAccount
+				sa, err := api.GetGCSAccounts(h.AccountHash)
+				if err != nil || len(sa.List) == 0 {
+					// try create gcs account
+					if serviceAccount, err = api.CreateGCSAccount(h.AccountHash, "auto generate log account", "log_account"); err != nil {
+						logger.Error().Err(err).Str("account_hash", h.AccountHash).Msg("create service_account failed")
+						os.Exit(5)
+					}
+				} else {
+					serviceAccount = sa.List[0]
+				}
+				logger.Debug().Str("account_hash", h.AccountHash).Msg("try auto generate hmac_keys")
+				// try generate HMAC_key
+				hmacs, err := api.GetGCSHMacKeys(h.AccountHash, serviceAccount.ID)
+				if err != nil || len(hmacs.List) <= keyLimit || (len(hmacs.List) > keyLimit && forceGenerate) {
+					// try generate hmac_key
+					hmac, err := api.CreateGCSHMacKey(h.AccountHash, serviceAccount.ID)
+					if err != nil {
+						logger.Error().Err(err).Str("account_hash", h.AccountHash).Str("service_account_name", serviceAccount.Name).Msg("create service_account failed")
+						os.Exit(5)
+					}
+					Cfg[h.AccountHash] = &configure{}
+					Cfg[h.AccountHash].AccessKeyID = hmac.AccessID
+					hcred.AccessKeyID = hmac.AccessID
+					Cfg[h.AccountHash].SecretAccessKey = hmac.Secret
+					hcred.SecretKey = hmac.Secret
+					Cfg.save()
+				} else {
+					logger.Error().Msg("hmac_key generate failed, try create it manually")
+					os.Exit(5)
+				}
+			} else if (Cfg[h.AccountHash].AccessKeyID != "" && Cfg[h.AccountHash].SecretAccessKey != "") || Cfg[h.AccountHash].PrivateKeyJSON != "" {
+				hcred.AccessKeyID = Cfg[h.AccountHash].AccessKeyID
+				hcred.SecretKey = Cfg[h.AccountHash].SecretAccessKey
+				hcred.PrivateKeyJSON = Cfg[h.AccountHash].PrivateKeyJSON
+			} else {
+				logger.Error().Str("account_hash", h.AccountHash).Msg("subAccounts's configure not found, please create new config")
+				os.Exit(3)
+			}
+			logger.Trace().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
+			urls, err := api.SearchLogsV2(&hwapi.SearchLogsOptions{
+				HostHash:       h.HostHash,
+				AccountHash:    h.AccountHash,
+				StartDate:      start,
+				EndDate:        end,
+				LogType:        logtype,
+				HCSCredentials: hcred,
+			})
+			if err != nil {
+				logger.Error().Err(err).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
+				os.Exit(1)
+			}
+			if len(urls) == 0 {
+				logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
+				continue
+			}
+			logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
+			tempDir := output
+			if strings.LastIndex(output, ":") > 0 {
+				tempDir = tempDir + "/" + h.Name + "/"
+			}
+			if _, e := api.Downloads(tempDir, urls...); e != nil {
+				logger.Error().Err(e).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
+			} else {
+				logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
+			}
 		}
-		logger.Trace().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
-		urls, err := api.SearchLogsV2(&hwapi.SearchLogsOptions{
-			HostHash:       h.HostHash,
-			AccountHash:    h.AccountHash,
-			StartDate:      start,
-			EndDate:        end,
-			LogType:        logtype,
-			HCSCredentials: hcred,
-		})
-		if err != nil {
-			logger.Error().Err(err).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
-			os.Exit(1)
+		if loopInterval == time.Minute*0 {
+			break
 		}
-		if len(urls) == 0 {
-			logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
-			continue
+		if time.Since(ts) <= loopInterval {
+			logger.Debug().Dur("sleep", loopInterval-time.Since(ts)).Msg("sleep awhile")
 		}
-		logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
-		tempDir := output
-		if strings.LastIndex(output, ":") > 0 {
-			tempDir = tempDir + "/" + h.Name + "/"
-		}
-		if _, e := api.Downloads(tempDir, urls...); e != nil {
-			logger.Error().Err(e).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
-		} else {
-			logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
+		if fixTime {
+			start = start.Add(loopInterval - time.Minute)
+			end = end.Add(loopInterval)
 		}
 	}
 }
