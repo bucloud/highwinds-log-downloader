@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -20,7 +22,7 @@ var (
 	maxResult              int           = 10
 	forceGenerate          bool          = false
 	keyLimit               int           = 3
-	worker                 uint          = 1
+	worker                 int           = 1
 	hosthashs              string        = ""
 	hostPattern            string        = ""
 	logtype                string        = "cds"
@@ -48,7 +50,7 @@ func init() {
 	flag.StringVar(&logtype, "t", logtype, "set logtype, available value cds,cdi")
 	flag.StringVar(&output, "d", output, "set directory to store logfiles, support local and AWS s3, use {remoteConfigName}:{prefix} when use AWS s3 as destination")
 	flag.StringVar(&loglevel, "log", loglevel, "set loglevel to print, [panic,fatal,error,warn,info,debug,trace] are available value")
-	flag.UintVar(&worker, "n", worker, "set workers")
+	flag.IntVar(&worker, "n", worker, "set workers")
 	flag.IntVar(&maxResult, "max", maxResult, "set max search results")
 	flag.BoolVar(&showSecret, "show_secret", showSecret, "show secert data instead of hide them")
 	flag.BoolVar(&autoGenerateCredential, "auto", autoGenerateCredential, "auto generate credential(access_key_id,secret_key), note credential will not generated when there are 3 credentials already exists")
@@ -116,7 +118,22 @@ func main() {
 		logger.Panic().Msg("default/global configure not found")
 		os.Exit(3)
 	}
-	api := hwapi.Init(&logger, &hwapi.LocalCacheConfig{FilePath: "./.state", MaxSize: 256 * 1024 * 1024}, worker)
+	api := hwapi.Init(
+		&http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   60 * time.Second,
+				KeepAlive: 60 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxConnsPerHost:     20,
+			MaxIdleConns:        100,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
+		&logger,
+		&hwapi.LocalCacheConfig{FilePath: "./.state", MaxSize: 256 * 1024 * 1024},
+		worker,
+	)
 	if strings.Index(output, ":") > 0 {
 		remoteName := output[:strings.Index(output, ":")]
 		remotePath := output[strings.Index(output, ":")+1:]
