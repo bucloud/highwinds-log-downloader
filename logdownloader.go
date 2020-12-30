@@ -275,7 +275,7 @@ func main() {
 				logger.Error().Str("account_hash", h.AccountHash).Msg("subAccounts's configure not found, please create new config")
 				os.Exit(3)
 			}
-			logger.Trace().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
+			logger.Trace().Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
 			urls, err := api.SearchLogsV2(&hwapi.SearchLogsOptions{
 				HostHash:       h.HostHash,
 				AccountHash:    h.AccountHash,
@@ -285,22 +285,22 @@ func main() {
 				HCSCredentials: hcred,
 			})
 			if err != nil {
-				logger.Error().Err(err).Int("seq", i).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
+				logger.Error().Err(err).Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
 				os.Exit(1)
 			}
 			if len(urls) == 0 {
-				logger.Info().Int("seq", i).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
+				logger.Info().Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
 				continue
 			}
-			logger.Info().Int("seq", i).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
+			logger.Info().Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
 			tempDir := output
 			if strings.LastIndex(output, ":") > 0 {
 				tempDir = tempDir + "/" + h.Name + "/"
 			}
 			if _, e := api.Downloads(tempDir, urls...); e != nil {
-				logger.Error().Err(e).Int("seq", i).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
+				logger.Error().Err(e).Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
 			} else {
-				logger.Info().Int("seq", i).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
+				logger.Info().Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
 			}
 		}
 		if loopInterval == time.Minute*0 {
