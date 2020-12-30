@@ -218,7 +218,9 @@ func main() {
 	// allurls := []string{}
 	for {
 		ts := time.Now()
-		for _, h := range hosts {
+		// for _, h := range hosts {
+		for i := 1; i <= len(hosts); i++ {
+			h := hosts[i-1]
 			startTime := time.Now()
 			hcred := &hwapi.HCSCredentials{}
 			if Cfg[h.AccountHash] == nil {
@@ -283,22 +285,22 @@ func main() {
 				HCSCredentials: hcred,
 			})
 			if err != nil {
-				logger.Error().Err(err).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
+				logger.Error().Err(err).Int("seq", i).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
 				os.Exit(1)
 			}
 			if len(urls) == 0 {
-				logger.Info().Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
+				logger.Info().Int("seq", i).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
 				continue
 			}
-			logger.Info().Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
+			logger.Info().Int("seq", i).Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
 			tempDir := output
 			if strings.LastIndex(output, ":") > 0 {
 				tempDir = tempDir + "/" + h.Name + "/"
 			}
 			if _, e := api.Downloads(tempDir, urls...); e != nil {
-				logger.Error().Err(e).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
+				logger.Error().Err(e).Int("seq", i).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
 			} else {
-				logger.Info().Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
+				logger.Info().Int("seq", i).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
 			}
 		}
 		if loopInterval == time.Minute*0 {
