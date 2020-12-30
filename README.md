@@ -16,7 +16,8 @@ highlands raw logs download tool
 # Note
 
 1. download state is used to reduce duplicate download, Note, this application doesn't check wether dest exists file, just check state info
-1. Currently, download state are controled by `https://github.com/bucloud/hwapi`, it save state only after downloads, that means SIGINT, SIGTERM could cause save failed
+1. download state is located at `$PWD/.state` by default, if you want to force download files, just delete the whole path 
+1. currently, download state are controled by `https://github.com/bucloud/hwapi`, it save state only after downloads, that means SIGINT, SIGTERM could cause save failed
 
 # usage
 
