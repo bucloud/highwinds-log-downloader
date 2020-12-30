@@ -91,7 +91,7 @@ func init() {
 		end = et
 	}
 
-	if _, e := os.Open(config); e != nil {
+	if _, e := os.Open(config); e == nil {
 		configFile = config
 		config = ""
 	}
