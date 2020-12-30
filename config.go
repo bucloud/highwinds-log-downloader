@@ -275,6 +275,7 @@ func (config *configure) collect() {
 		}
 		break
 	}
+	/*
 	credentialType := scanInput{Placeholder: "Select credential type you prefer:", Options: []*inputOptions{
 		&inputOptions{Label: "privateKey, unknow as privateKeyJSON", Value: "privateKey"},
 		&inputOptions{Label: "accessID+secretKey, simliar to AWS S3 credentials", Value: "secretKey"},
@@ -308,7 +309,7 @@ func (config *configure) collect() {
 			continue
 		}
 		break
-	}
+	}*/
 }
 
 func inSlice(slice []string, ele string) bool {
