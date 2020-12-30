@@ -32,7 +32,7 @@ var (
 	showSecret             bool          = false
 	autoGenerateCredential bool          = false
 	loglevel               string        = "error"
-	loopInterval           time.Duration = time.Minute * 10
+	loopInterval           time.Duration = time.Minute * 0
 	fixTime                bool          = true
 
 	// Cfg configure
