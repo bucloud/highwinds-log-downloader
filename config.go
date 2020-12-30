@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -53,6 +50,16 @@ func loadConfig() (nsConfigure, error) {
 		nc[section.Name()] = &c
 	}
 	return nc, nil
+}
+
+// Default return default configure
+func (nc nsConfigure) Default(scopename ...string) *configure {
+	for n := range nc {
+		if len(scopename) > 0 && n == scopename[0] {
+			return nc[scopename[0]]
+		}
+	}
+	return nc[ini.DefaultSection]
 }
 func (nc nsConfigure) save() error {
 	os.Mkdir(configFile[:strings.LastIndex(configFile, "/")], 0700)
@@ -276,40 +283,40 @@ func (config *configure) collect() {
 		break
 	}
 	/*
-	credentialType := scanInput{Placeholder: "Select credential type you prefer:", Options: []*inputOptions{
-		&inputOptions{Label: "privateKey, unknow as privateKeyJSON", Value: "privateKey"},
-		&inputOptions{Label: "accessID+secretKey, simliar to AWS S3 credentials", Value: "secretKey"},
-	}, Default: "privateKey", Minlength: 1}.scan()
-	for {
-		switch credentialType {
-		case "privateKey":
-			config.PrivateKeyJSON = scanInput{Placeholder: "Input your private key json file path or base64 encoded string :", Default: config.PrivateKeyJSON, Password: true, Vaild: func(s *string) (bool, error) {
-				if len(*s) < 1 {
-					return false, fmt.Errorf("cannot been null")
-				}
-				b, e := ioutil.ReadFile(*s) //os.OpenFile(config.PrivateKeyJSON, os.O_RDONLY, 0600)
-				if e != nil {
-					_, e := base64.StdEncoding.DecodeString(config.PrivateKeyJSON)
-					if e != nil || config.PrivateKeyJSON == "" {
-						return false, fmt.Errorf("Input error, no such file and input is not vaild base64 encoded string")
+		credentialType := scanInput{Placeholder: "Select credential type you prefer:", Options: []*inputOptions{
+			&inputOptions{Label: "privateKey, unknow as privateKeyJSON", Value: "privateKey"},
+			&inputOptions{Label: "accessID+secretKey, simliar to AWS S3 credentials", Value: "secretKey"},
+		}, Default: "privateKey", Minlength: 1}.scan()
+		for {
+			switch credentialType {
+			case "privateKey":
+				config.PrivateKeyJSON = scanInput{Placeholder: "Input your private key json file path or base64 encoded string :", Default: config.PrivateKeyJSON, Password: true, Vaild: func(s *string) (bool, error) {
+					if len(*s) < 1 {
+						return false, fmt.Errorf("cannot been null")
 					}
-				} else {
-					// read config from file
-					if !json.Valid(b) {
-						return false, fmt.Errorf("The private key json file doesn't vaild JSON content")
+					b, e := ioutil.ReadFile(*s) //os.OpenFile(config.PrivateKeyJSON, os.O_RDONLY, 0600)
+					if e != nil {
+						_, e := base64.StdEncoding.DecodeString(config.PrivateKeyJSON)
+						if e != nil || config.PrivateKeyJSON == "" {
+							return false, fmt.Errorf("Input error, no such file and input is not vaild base64 encoded string")
+						}
+					} else {
+						// read config from file
+						if !json.Valid(b) {
+							return false, fmt.Errorf("The private key json file doesn't vaild JSON content")
+						}
+						*s = base64.StdEncoding.EncodeToString(b)
 					}
-					*s = base64.StdEncoding.EncodeToString(b)
-				}
-				return true, nil
-			}}.scan()
-		case "secretKey":
-			config.AccessKeyID = scanInput{Placeholder: "Input your access key ID : ", Default: config.AccessKeyID, Minlength: 10}.scan()
-			config.SecretAccessKey = scanInput{Placeholder: "Input your secret key : ", Default: config.SecretAccessKey, Password: true, Minlength: 10}.scan()
-		default:
-			continue
-		}
-		break
-	}*/
+					return true, nil
+				}}.scan()
+			case "secretKey":
+				config.AccessKeyID = scanInput{Placeholder: "Input your access key ID : ", Default: config.AccessKeyID, Minlength: 10}.scan()
+				config.SecretAccessKey = scanInput{Placeholder: "Input your secret key : ", Default: config.SecretAccessKey, Password: true, Minlength: 10}.scan()
+			default:
+				continue
+			}
+			break
+		}*/
 }
 
 func inSlice(slice []string, ele string) bool {

@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/bucloud/hwapi"
 	"github.com/rs/zerolog"
-	"gopkg.in/ini.v1"
 )
 
 var (
@@ -34,6 +33,7 @@ var (
 	loglevel               string        = "error"
 	loopInterval           time.Duration = time.Minute * 0
 	fixTime                bool          = true
+	config                 string        = configFile
 
 	// Cfg configure
 	Cfg     nsConfigure   = make(nsConfigure)
@@ -50,6 +50,7 @@ func init() {
 	flag.StringVar(&logtype, "t", logtype, "set logtype, available value cds,cdi")
 	flag.StringVar(&output, "d", output, "set directory to store logfiles, support local and AWS s3, use {remoteConfigName}:{prefix} when use AWS s3 as destination")
 	flag.StringVar(&loglevel, "log", loglevel, "set loglevel to print, [panic,fatal,error,warn,info,debug,trace] are available value")
+	flag.StringVar(&config, "config", config, "use speicaled config file or config scope name")
 	flag.IntVar(&worker, "n", worker, "set workers")
 	flag.IntVar(&maxResult, "max", maxResult, "set max search results")
 	flag.BoolVar(&showSecret, "show_secret", showSecret, "show secert data instead of hide them")
@@ -90,6 +91,10 @@ func init() {
 		end = et
 	}
 
+	if _, e := os.Open(config); e != nil {
+		configFile = config
+		config = ""
+	}
 	var err error
 	Cfg, err = loadConfig()
 	if len(os.Args) == 2 && os.Args[1] == "config" {
@@ -113,7 +118,7 @@ func init() {
 }
 
 func main() {
-	conf := Cfg[ini.DefaultSection]
+	conf := Cfg.Default(config)
 	if conf == nil {
 		logger.Panic().Msg("default/global configure not found")
 		os.Exit(3)
@@ -217,7 +222,7 @@ func main() {
 			startTime := time.Now()
 			hcred := &hwapi.HCSCredentials{}
 			if Cfg[h.AccountHash] == nil {
-				Cfg[h.AccountHash] = Cfg[ini.DefaultSection]
+				Cfg[h.AccountHash] = Cfg.Default(config)
 				if h.AccountHash != cu.AccountHash {
 					Cfg[h.AccountHash].AccessKeyID = ""
 					Cfg[h.AccountHash].SecretAccessKey = ""
