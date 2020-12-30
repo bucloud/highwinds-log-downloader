@@ -79,7 +79,7 @@ func init() {
 		return fmt.Sprintf("%s=", i)
 	}
 	output.FormatFieldValue = func(i interface{}) string {
-		return strings.ToUpper(fmt.Sprintf("%s", i))
+		return fmt.Sprintf("%s", i)
 	}
 	logger = zerolog.New(output).With().Timestamp().Logger()
 
@@ -287,18 +287,18 @@ func main() {
 				os.Exit(1)
 			}
 			if len(urls) == 0 {
-				logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
+				logger.Info().Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Msg("found nothing, handle next")
 				continue
 			}
-			logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
+			logger.Info().Str("host_hash", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("search raw log succeed")
 			tempDir := output
 			if strings.LastIndex(output, ":") > 0 {
 				tempDir = tempDir + "/" + h.Name + "/"
 			}
 			if _, e := api.Downloads(tempDir, urls...); e != nil {
-				logger.Error().Err(e).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
+				logger.Error().Err(e).Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Msg("download logs failed")
 			} else {
-				logger.Info().Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
+				logger.Info().Str("host", h.Name+"("+h.HostHash+")").Time("from", start).Time("to", end).Str("type", logtype).Int("file_number", len(urls)).Dur("spent", time.Since(startTime)).Msg("download complete")
 			}
 		}
 		if loopInterval == time.Minute*0 {
