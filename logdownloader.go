@@ -34,7 +34,10 @@ var (
 	loopInterval           time.Duration = time.Minute * 0
 	fixTime                bool          = true
 	config                 string        = configFile
+	stateDir               string        = "./.state"
+	stateSize              int           = 256 * 1024 * 1024
 
+	hcsDeprecatedFrom time.Time = time.Date(2020, 12, 10, 23, 59, 59, 0, time.UTC)
 	// Cfg configure
 	Cfg     nsConfigure   = make(nsConfigure)
 	urlChan chan []string = make(chan []string, 3000)
@@ -58,6 +61,8 @@ func init() {
 	flag.BoolVar(&forceGenerate, "force_generate", forceGenerate, "force generate credentials if there are 3 credentials already exists in account")
 	flag.DurationVar(&loopInterval, "loop", loopInterval, "loop download logs with a provided time range, zero means disable loop")
 	flag.BoolVar(&fixTime, "fix_time", fixTime, "fix start/end time in loop download mode")
+	flag.StringVar(&stateDir, "c", stateDir, "set cache data dir")
+	flag.IntVar(&stateSize, "cs", stateSize, "set cache data maximum size")
 	flag.Parse()
 
 	switch loglevel {
@@ -136,7 +141,7 @@ func main() {
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
 		&logger,
-		&hwapi.LocalCacheConfig{FilePath: "./.state", MaxSize: 256 * 1024 * 1024},
+		&hwapi.LocalCacheConfig{FilePath: stateDir, MaxSize: stateSize},
 		worker,
 	)
 	if strings.Index(output, ":") > 0 {
@@ -155,7 +160,7 @@ func main() {
 	if conf.AuthType == "token" {
 		api.SetToken(conf.Token)
 	} else {
-		if _, e := api.Auth(conf.Username, conf.Password); e != nil {
+		if _, e := api.Auth(conf.Username, conf.Password, end.Before(hcsDeprecatedFrom)); e != nil {
 			logger.Error().Err(e).Msg("get accesstoken failed")
 			os.Exit(4)
 		}
@@ -276,14 +281,22 @@ func main() {
 				os.Exit(3)
 			}
 			logger.Trace().Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("begin search raw logs")
-			urls, err := api.SearchLogsV2(&hwapi.SearchLogsOptions{
-				HostHash:       h.HostHash,
-				AccountHash:    h.AccountHash,
-				StartDate:      start,
-				EndDate:        end,
-				LogType:        logtype,
-				HCSCredentials: hcred,
-			})
+
+			var urls []string
+			var err error
+			if end.Before(hcsDeprecatedFrom) {
+				urls, err = api.SearchLogs(h.HostHash, logtype, start, end)
+			} else {
+				urls, err = api.SearchLogsV2(&hwapi.SearchLogsOptions{
+					HostHash:       h.HostHash,
+					AccountHash:    h.AccountHash,
+					StartDate:      start,
+					EndDate:        end,
+					LogType:        logtype,
+					HCSCredentials: hcred,
+				})
+			}
+
 			if err != nil {
 				logger.Error().Err(err).Str("seq", fmt.Sprintf("%d/%d", i, len(hosts))).Str("host_hash", h.HostHash).Time("from", start).Time("to", end).Str("type", logtype).Msg("search logs failed")
 				os.Exit(1)
@@ -308,6 +321,7 @@ func main() {
 		}
 		if time.Since(ts) <= loopInterval {
 			logger.Debug().Dur("sleep", loopInterval-time.Since(ts)).Msg("sleep awhile")
+			time.Sleep(loopInterval - time.Since(ts))
 		}
 		if fixTime {
 			start = start.Add(loopInterval - time.Minute)
